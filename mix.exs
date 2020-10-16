@@ -7,7 +7,10 @@ defmodule Consul.MixProject do
       version: "0.1.0",
       elixir: "~> 1.10",
       start_permanent: Mix.env() == :prod,
-      deps: deps()
+      deps: deps(),
+      package: package(),
+      source_url: "https://github.com/team-telnyx/consulex",
+      description: description()
     ]
   end
 
@@ -25,6 +28,21 @@ defmodule Consul.MixProject do
       {:jason, "~> 1.2", optional: true},
       {:poison, "~> 3.1", optional: true},
       {:yaml_elixir, "~> 2.4", optional: true}
+    ]
+  end
+
+  defp description do
+    """
+    Library for interacting with Consul on top of Tesla
+    """
+  end
+
+  defp package do
+    [
+      maintainers: ["Guilherme Balena Versiani <guilherme@telnyx.com>"],
+      licenses: ["Apache 2.0"],
+      links: %{"GitHub" => "https://github.com/team-telnyx/consulex"},
+      files: ~w"lib mix.exs README.md LICENSE"
     ]
   end
 end
