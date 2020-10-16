@@ -24,7 +24,7 @@ defmodule Tesla.Middleware.ConsulWatch do
     GenServer.call(__MODULE__, {:reset, url})
   end
 
-  def start_link(_opts) do
+  def start_link(_opts \\ []) do
     GenServer.start_link(__MODULE__, [], name: __MODULE__)
   end
 

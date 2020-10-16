@@ -4,7 +4,7 @@ defmodule Consul.MixProject do
   def project do
     [
       app: :consulex,
-      version: "0.1.1",
+      version: "0.1.2",
       elixir: "~> 1.10",
       start_permanent: Mix.env() == :prod,
       deps: deps(),
@@ -17,7 +17,8 @@ defmodule Consul.MixProject do
   # Run "mix help compile.app" to learn about applications.
   def application do
     [
-      extra_applications: [:logger]
+      extra_applications: [:logger],
+      mod: {Consul.Application, []}
     ]
   end
 
