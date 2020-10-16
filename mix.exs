@@ -27,7 +27,8 @@ defmodule Consul.MixProject do
       {:tesla, "~> 1.3"},
       {:jason, "~> 1.2", optional: true},
       {:poison, "~> 3.1", optional: true},
-      {:yaml_elixir, "~> 2.4", optional: true}
+      {:yaml_elixir, "~> 2.4", optional: true},
+      {:ex_doc, ">= 0.0.0", only: :dev, runtime: false}
     ]
   end
 
