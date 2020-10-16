@@ -4,7 +4,7 @@ defmodule Consul.MixProject do
   def project do
     [
       app: :consulex,
-      version: "0.1.0",
+      version: "0.1.1",
       elixir: "~> 1.10",
       start_permanent: Mix.env() == :prod,
       deps: deps(),
@@ -25,9 +25,9 @@ defmodule Consul.MixProject do
   defp deps do
     [
       {:tesla, "~> 1.3"},
-      {:jason, "~> 1.2", optional: true},
-      {:poison, "~> 3.1", optional: true},
-      {:yaml_elixir, "~> 2.4", optional: true},
+      {:jason, ">= 1.0.0", optional: true},
+      {:poison, ">= 2.0.0 and < 5.0.0", optional: true},
+      {:yaml_elixir, ">= 2.0.0", optional: true},
       {:ex_doc, ">= 0.0.0", only: :dev, runtime: false}
     ]
   end
