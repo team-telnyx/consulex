@@ -43,48 +43,36 @@ defmodule Consul.Connection do
       Tesla.Middleware.FollowRedirects
     ]
 
-    middleware =
-      case Keyword.take(opts, [:timeout]) do
-        [timeout: timeout] ->
-          middleware ++
-            [
-              {Tesla.Middleware.Timeout, timeout: timeout}
-            ]
-
-        [] ->
-          middleware
-      end
+    opts = Keyword.update(opts, :retry, @retry_defaults, fn retry ->
+      Keyword.merge(@retry_defaults, retry)
+    end)
 
     middleware =
-      case Keyword.take(opts, [:token]) do
-        [token: token] ->
-          middleware ++
-            [
-              {Tesla.Middleware.Headers, [{"x-consul-token", token}]}
-            ]
-
-        _ ->
-          middleware
-      end
-
-    middleware =
-      case Keyword.take(opts, [:wait]) do
-        [wait: wait] ->
-          middleware ++
-            [
-              {Tesla.Middleware.ConsulWatch, wait: wait}
-            ]
-
-        _ ->
-          middleware
-      end
-
-    middleware =
-      @retry_defaults
-      |> Keyword.merge(Keyword.get(opts, :retry, []))
-      |> (&(middleware ++ [{Tesla.Middleware.Retry, &1}])).()
+      Enum.reduce(opts, middleware, fn opt, middleware ->
+        plug_middleware(opt, middleware)
+      end)
 
     Tesla.client(middleware)
+  end
+
+  defp plug_middleware({:timeout, timeout}, middleware) do
+    middleware ++ [{Tesla.Middleware.Timeout, timeout: timeout}]
+  end
+
+  defp plug_middleware({:token, token}, middleware) do
+    middleware ++ [{Tesla.Middleware.Headers, [{"x-consul-token", token}]}]
+  end
+
+  defp plug_middleware({:wait, wait}, middleware) do
+    middleware ++ [{Tesla.Middleware.ConsulWatch, wait: wait}]
+  end
+
+  defp plug_middleware({:retry, retry}, middleware) do
+    middleware ++ [{Tesla.Middleware.Retry, retry}]
+  end
+
+  defp plug_middleware(_opt, middleware) do
+    middleware
   end
 
   @doc """
