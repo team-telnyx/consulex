@@ -37,7 +37,14 @@ defmodule Consul.Api.V1.Kv do
           results
           |> Enum.map(fn
             %{"Value" => value} = map when value != nil ->
-              Map.put(map, "Value", decode_value(value))
+              value = Base.decode64!(value)
+
+              value =
+                if Keyword.get(opts, :decode, true),
+                  do: decode_value(value),
+                  else: value
+
+              Map.put(map, "Value", value)
 
             other ->
               other
@@ -51,10 +58,10 @@ defmodule Consul.Api.V1.Kv do
   end
 
   defp decode_value(value) do
-    with value <- Base.decode64!(value),
-         {:ok, map} <- JsonCodec.decode(value) do
-      map
-    else
+    case JsonCodec.decode(value) do
+      {:ok, map} ->
+        map
+
       {:error, _} ->
         case YamlCodec.read_from_string(value) do
           {:ok, value} -> value
