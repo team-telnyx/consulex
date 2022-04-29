@@ -7,6 +7,7 @@ defmodule Consul.Connection do
 
   @default_scheme "http://"
   @consulex_version Mix.Project.config() |> Keyword.get(:version, "")
+  @client "consulex"
 
   @retry_defaults [
     delay: 50,
@@ -40,12 +41,14 @@ defmodule Consul.Connection do
     middleware = [
       {Tesla.Middleware.BaseUrl, base_url},
       Tesla.Middleware.DecompressResponse,
-      Tesla.Middleware.FollowRedirects
+      Tesla.Middleware.FollowRedirects,
+      {Tesla.Middleware.Telemetry, metadata: %{client_label: @client}}
     ]
 
-    opts = Keyword.update(opts, :retry, @retry_defaults, fn retry ->
-      Keyword.merge(@retry_defaults, retry)
-    end)
+    opts =
+      Keyword.update(opts, :retry, @retry_defaults, fn retry ->
+        Keyword.merge(@retry_defaults, retry)
+      end)
 
     middleware =
       Enum.reduce(opts, middleware, fn opt, middleware ->
