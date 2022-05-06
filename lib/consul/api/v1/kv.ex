@@ -62,11 +62,19 @@ defmodule Consul.Api.V1.Kv do
       {:ok, map} ->
         map
 
+      ## poison new releases return the position
+      {:error, _, _pos} ->
+        check_yaml(value)
+
       {:error, _} ->
-        case YamlCodec.read_from_string(value) do
-          {:ok, value} -> value
-          {:error, _} -> raise RuntimeError, "expected JSON or YAML value"
-        end
+        check_yaml(value)
+    end
+  end
+
+  def check_yaml(value) do
+    case YamlCodec.read_from_string(value) do
+      {:ok, value} -> value
+      {:error, _} -> raise RuntimeError, "expected JSON or YAML value"
     end
   end
 end
