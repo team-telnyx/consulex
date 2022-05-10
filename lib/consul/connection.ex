@@ -43,16 +43,19 @@ defmodule Consul.Connection do
       Tesla.Middleware.FollowRedirects
     ]
 
-    opts = Keyword.update(opts, :retry, @retry_defaults, fn retry ->
-      Keyword.merge(@retry_defaults, retry)
-    end)
+    adapter = Keyword.get(opts, :adapter)
+
+    opts =
+      Keyword.update(opts, :retry, @retry_defaults, fn retry ->
+        Keyword.merge(@retry_defaults, retry)
+      end)
 
     middleware =
       Enum.reduce(opts, middleware, fn opt, middleware ->
         plug_middleware(opt, middleware)
       end)
 
-    Tesla.client(middleware)
+    Tesla.client(middleware, adapter)
   end
 
   defp plug_middleware({:timeout, timeout}, middleware) do
