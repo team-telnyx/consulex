@@ -16,7 +16,6 @@ defmodule Tesla.Middleware.ConsulWatch do
 
   use GenServer
 
-  @default_wait 60_000
   @header_x_consul_index "x-consul-index"
   @index_table Module.concat(__MODULE__, "Indexes")
 
@@ -56,12 +55,15 @@ defmodule Tesla.Middleware.ConsulWatch do
         env
 
       [{_, index}] ->
-        wait =
-          Keyword.get(opts, :wait, @default_wait)
-          |> to_gotime()
+        query =
+          case Keyword.get(opts, :wait) do
+            nil -> []
+            wait -> [wait: to_gotime(wait)]
+          end
 
-        env
-        |> Map.update!(:query, &(&1 ++ [wait: wait, index: index]))
+        query = [index: index] ++ query
+
+        Map.update!(env, :query, &Keyword.merge(&1, query))
     end
   end
 
