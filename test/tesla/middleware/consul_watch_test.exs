@@ -64,7 +64,7 @@ defmodule Tesla.Middleware.ConsulWatchTest do
     {:ok, %{query: query}} = Tesla.get(conn(), "/v1/kv/#{@key}")
     refute Keyword.has_key?(query, :index)
 
-    # next request that returns index of 0
+    # next request that returns index of 50
     {:ok, env} = Tesla.get(conn(), "/v1/kv/#{@key}")
     assert Tesla.get_header(env, "x-consul-index") == "50"
 
