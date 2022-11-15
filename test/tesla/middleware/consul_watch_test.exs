@@ -2,13 +2,14 @@ defmodule Tesla.Middleware.ConsulWatchTest do
   use ExUnit.Case
   import Tesla.Mock
 
-  alias Tesla.Middleware.ConsulWatch
+  alias Consul.IndexStore
 
   @base_url "http://consul"
   @key "foo"
 
   setup do
-    :ok = ConsulWatch.reset(%{url: "#{@base_url}/v1/kv/#{@key}"})
+    {:ok, _} = start_supervised(IndexStore)
+    :ok
   end
 
   test "doesn't specify index on initial fetch" do

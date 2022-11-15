@@ -14,31 +14,12 @@ defmodule Tesla.Middleware.ConsulWatch do
 
   @behaviour Tesla.Middleware
 
-  use GenServer
+  alias Consul.IndexStore
 
   @header_x_consul_index "x-consul-index"
-  @index_table Module.concat(__MODULE__, "Indexes")
 
   def reset(%{url: url}) do
-    GenServer.call(__MODULE__, {:reset, url})
-  end
-
-  def start_link(_opts \\ []) do
-    GenServer.start_link(__MODULE__, [], name: __MODULE__)
-  end
-
-  @impl GenServer
-  def init(_) do
-    @index_table = :ets.new(@index_table, [:named_table, :public])
-
-    {:ok, []}
-  end
-
-  @impl GenServer
-  def handle_call({:reset, url}, _from, state) do
-    :ets.delete(@index_table, url)
-
-    {:reply, :ok, state}
+    IndexStore.reset_index(url)
   end
 
   @impl Tesla.Middleware
@@ -70,10 +51,7 @@ defmodule Tesla.Middleware.ConsulWatch do
   defp load_index(env, _opts), do: env
 
   defp current_index(url) do
-    case :ets.lookup(@index_table, url) do
-      [] -> nil
-      [{_, index}] -> index
-    end
+    IndexStore.get_index(url)
   end
 
   def to_gotime(duration) do
@@ -126,7 +104,7 @@ defmodule Tesla.Middleware.ConsulWatch do
   def store_index({:error, reason}), do: {:error, reason}
 
   defp handle_new_index(url, nil) do
-    :ets.delete(@index_table, url)
+    IndexStore.reset_index(url)
   end
 
   defp handle_new_index(url, new_index) do
@@ -134,15 +112,15 @@ defmodule Tesla.Middleware.ConsulWatch do
 
     cond do
       is_nil(current_index) ->
-        :ets.insert(@index_table, {url, new_index})
+        IndexStore.store_index(url, new_index)
 
       new_index < current_index || new_index < 1 ->
         # reset index when it has moved backwards or is not greater than 0
         # see: https://www.consul.io/api-docs/features/blocking#implementation-details
-        :ets.delete(@index_table, url)
+        IndexStore.reset_index(url)
 
       true ->
-        :ets.insert(@index_table, {url, new_index})
+        IndexStore.store_index(url, new_index)
     end
   end
 end
