@@ -35,6 +35,27 @@ defmodule Consul.Connection do
 
   @doc """
   Builds a Tesla client.
+
+  ## Options
+
+    * `adapter` - specify custom Tesla adapter, if not set will use Tesla's
+      default one
+    * `retry` - options for `Tesla.Middleware.Retry` middleware
+    * `timeout` - when given, will include `Tesla.Middleware.Timeout`
+      middleware configured with given value
+    * `token` - when given, will include `x-consul-token` header with given
+      value in the requests
+    * `wait` - when given, will include `Tesla.Middleware.ConsulWatch`
+      middleware configured with given value in milliseconds
+
+  When using `wait` option, make sure its value is larger than the timeout
+  used by the underlying adapter (specified in options or default one).
+  Otherwise, the request may be timing out before wait period passes.
+
+  Note that using `timeout` option is not always sufficient to achieve this
+  as some adapters (e.g. `Tesla.Adapter.Finch`) are not compatible with
+  `Tesla.Middleware.Timeout` middleware that is used when `timeout` option
+  is specified.
   """
   def new(base_url, opts \\ []) do
     middleware = [
