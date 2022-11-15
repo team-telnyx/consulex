@@ -23,38 +23,79 @@ defmodule Tesla.Middleware.ConsulWatch do
   end
 
   @impl Tesla.Middleware
-  def call(env, next, opts) do
+  def call(%{url: url} = env, next, opts) do
+    wait = Keyword.get(opts, :wait)
+
     env
-    |> load_index(opts)
+    |> maybe_set_index(url)
+    |> maybe_set_wait(wait)
     |> Tesla.run(next)
-    |> store_index()
+    |> store_index(url)
   end
 
-  defp load_index(%{method: :get, url: url} = env, opts) do
-    case current_index(url) do
+  defp maybe_set_index(%{method: :get, query: query} = env, url) do
+    case IndexStore.get_index(url) do
       nil ->
         env
 
       index ->
-        query =
-          case Keyword.get(opts, :wait) do
-            nil -> []
-            wait -> [wait: to_gotime(wait)]
-          end
-
-        query = [index: index] ++ query
-
-        Map.update!(env, :query, &Keyword.merge(&1, query))
+        %{env | query: Keyword.put(query, :index, index)}
     end
   end
 
-  defp load_index(env, _opts), do: env
+  defp maybe_set_wait(%{query: query} = env, wait) do
+    case Keyword.get(query, :index) do
+      nil ->
+        # don't set wait param on initial fetch
+        env
 
-  defp current_index(url) do
-    IndexStore.get_index(url)
+      _ ->
+        wait = Keyword.get(query, :wait, wait)
+        %{env | query: Keyword.put(query, :wait, format_wait(wait))}
+    end
   end
 
-  def to_gotime(duration) do
+  defp store_index({:ok, env}, url) do
+    index =
+      with [index | _] <- Tesla.get_headers(env, @header_x_consul_index),
+           {index, _} <- Integer.parse(index) do
+        index
+      else
+        _ -> nil
+      end
+
+    handle_new_index(url, index)
+
+    {:ok, env}
+  end
+
+  def store_index({:error, reason}), do: {:error, reason}
+
+  defp handle_new_index(url, nil) do
+    IndexStore.reset_index(url)
+  end
+
+  defp handle_new_index(url, new_index) do
+    current_index = IndexStore.get_index(url)
+
+    cond do
+      is_nil(current_index) ->
+        IndexStore.store_index(url, new_index)
+
+      new_index < current_index || new_index < 1 ->
+        # reset index when it has moved backwards or is not greater than 0
+        # see: https://www.consul.io/api-docs/features/blocking#implementation-details
+        IndexStore.reset_index(url)
+
+      true ->
+        IndexStore.store_index(url, new_index)
+    end
+  end
+
+  defp format_wait(nil), do: nil
+  defp format_wait(wait) when is_binary(wait), do: wait
+
+  defp format_wait(duration) do
     ms =
       case rem(duration, 1_000) do
         0 ->
@@ -84,43 +125,6 @@ defmodule Tesla.Middleware.ConsulWatch do
     case div(duration, 60) do
       0 -> m
       h -> "#{h}h#{m}"
-    end
-  end
-
-  def store_index({:ok, %{url: url} = env}) do
-    index =
-      with [index | _] <- Tesla.get_headers(env, @header_x_consul_index),
-           {index, _} <- Integer.parse(index) do
-        index
-      else
-        _ -> nil
-      end
-
-    handle_new_index(url, index)
-
-    {:ok, env}
-  end
-
-  def store_index({:error, reason}), do: {:error, reason}
-
-  defp handle_new_index(url, nil) do
-    IndexStore.reset_index(url)
-  end
-
-  defp handle_new_index(url, new_index) do
-    current_index = current_index(url)
-
-    cond do
-      is_nil(current_index) ->
-        IndexStore.store_index(url, new_index)
-
-      new_index < current_index || new_index < 1 ->
-        # reset index when it has moved backwards or is not greater than 0
-        # see: https://www.consul.io/api-docs/features/blocking#implementation-details
-        IndexStore.reset_index(url)
-
-      true ->
-        IndexStore.store_index(url, new_index)
     end
   end
 end
