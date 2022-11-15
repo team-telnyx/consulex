@@ -143,6 +143,29 @@ defmodule Tesla.Middleware.ConsulWatchTest do
     assert {:ok, nil} = Keyword.fetch(query, :wait)
   end
 
+  test "index is local to the process" do
+    conn = conn(wait: true)
+    mock(fn env -> {:ok, response(env, "100")} end)
+
+    conn |> Tesla.get("/v1/kv/#{@key}")
+
+    {:ok, %{query: query}} = Tesla.get(conn, "/v1/kv/#{@key}")
+    assert query[:index] == 100
+
+    task =
+      Task.async(fn ->
+        mock(fn env -> {:ok, response(env, "200")} end)
+
+        {:ok, %{query: query}} = Tesla.get(conn, "/v1/kv/#{@key}")
+        refute Keyword.has_key?(query, :index)
+
+        {:ok, %{query: query}} = Tesla.get(conn, "/v1/kv/#{@key}")
+        assert query[:index] == 200
+      end)
+
+    Task.await(task)
+  end
+
   defp conn(opts) do
     opts = Keyword.put_new(opts, :wait, nil)
     Consul.Connection.new(@base_url, [adapter: Tesla.Mock] ++ opts)
