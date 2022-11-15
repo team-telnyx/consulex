@@ -13,26 +13,30 @@ defmodule Tesla.Middleware.ConsulWatchTest do
   end
 
   test "doesn't specify index on initial fetch" do
+    conn = conn()
     mock(fn env -> {:ok, response(env, "100")} end)
 
-    {:ok, %{query: query}} = Tesla.get(conn(), "/v1/kv/#{@key}")
+    {:ok, %{query: query}} = Tesla.get(conn, "/v1/kv/#{@key}")
 
     refute Keyword.has_key?(query, :index)
   end
 
   test "specifies index on subsequent requests" do
+    conn = conn()
     mock(fn env -> {:ok, response(env, "100")} end)
 
     # initial fetch
-    Tesla.get(conn(), "/v1/kv/#{@key}")
+    Tesla.get(conn, "/v1/kv/#{@key}")
 
     # subsequent request
-    {:ok, %{query: query}} = Tesla.get(conn(), "/v1/kv/#{@key}")
+    {:ok, %{query: query}} = Tesla.get(conn, "/v1/kv/#{@key}")
 
     assert query[:index] == 100
   end
 
   test "resets index when consul responds with index that is not greater than zero" do
+    conn = conn()
+
     mock(fn %{query: query} = env ->
       case Keyword.get(query, :index) do
         nil -> {:ok, response(env, "100")}
@@ -41,19 +45,21 @@ defmodule Tesla.Middleware.ConsulWatchTest do
     end)
 
     # initial fetch
-    {:ok, %{query: query}} = Tesla.get(conn(), "/v1/kv/#{@key}")
+    {:ok, %{query: query}} = Tesla.get(conn, "/v1/kv/#{@key}")
     refute Keyword.has_key?(query, :index)
 
     # next request that returns index of 0
-    {:ok, env} = Tesla.get(conn(), "/v1/kv/#{@key}")
+    {:ok, env} = Tesla.get(conn, "/v1/kv/#{@key}")
     assert Tesla.get_header(env, "x-consul-index") == "0"
 
     # subsequent request
-    {:ok, %{query: query}} = Tesla.get(conn(), "/v1/kv/#{@key}")
+    {:ok, %{query: query}} = Tesla.get(conn, "/v1/kv/#{@key}")
     refute Keyword.has_key?(query, :index)
   end
 
   test "resets index when consul responds with index that goes backwards" do
+    conn = conn()
+
     mock(fn %{query: query} = env ->
       case Keyword.get(query, :index) do
         nil -> {:ok, response(env, "100")}
@@ -62,35 +68,37 @@ defmodule Tesla.Middleware.ConsulWatchTest do
     end)
 
     # initial fetch
-    {:ok, %{query: query}} = Tesla.get(conn(), "/v1/kv/#{@key}")
+    {:ok, %{query: query}} = Tesla.get(conn, "/v1/kv/#{@key}")
     refute Keyword.has_key?(query, :index)
 
     # next request that returns index of 50
-    {:ok, env} = Tesla.get(conn(), "/v1/kv/#{@key}")
+    {:ok, env} = Tesla.get(conn, "/v1/kv/#{@key}")
     assert Tesla.get_header(env, "x-consul-index") == "50"
 
     # subsequent request
-    {:ok, %{query: query}} = Tesla.get(conn(), "/v1/kv/#{@key}")
+    {:ok, %{query: query}} = Tesla.get(conn, "/v1/kv/#{@key}")
     refute Keyword.has_key?(query, :index)
   end
 
   test "doesn't wait on initial fetch" do
+    conn = conn(wait: 123_456)
     mock(fn env -> {:ok, response(env, "100")} end)
 
     {:ok, %{query: query}} =
-      conn(wait: 123_456)
+      conn
       |> Tesla.get("/v1/kv/#{@key}")
 
     refute Keyword.has_key?(query, :wait)
   end
 
   test "waits on subsequent requests" do
+    conn = conn(wait: 123_456)
     mock(fn env -> {:ok, response(env, "100")} end)
 
-    conn(wait: 123_456) |> Tesla.get("/v1/kv/#{@key}")
+    conn |> Tesla.get("/v1/kv/#{@key}")
 
     {:ok, %{query: query}} =
-      conn(wait: 123_456)
+      conn
       |> Tesla.get("/v1/kv/#{@key}")
 
     assert query[:wait] == "2m3.456s"
