@@ -93,6 +93,7 @@ defmodule Tesla.Middleware.ConsulWatch do
   end
 
   defp format_wait(nil), do: nil
+  defp format_wait(true), do: nil
   defp format_wait(wait) when is_binary(wait), do: wait
 
   defp format_wait(duration) do
