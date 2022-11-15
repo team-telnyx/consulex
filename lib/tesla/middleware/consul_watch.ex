@@ -34,13 +34,16 @@ defmodule Tesla.Middleware.ConsulWatch do
   end
 
   defp maybe_set_index(%{method: :get, query: query} = env, url) do
-    case IndexStore.get_index(url) do
-      nil ->
-        env
+    index =
+      case Keyword.fetch(query, :index) do
+        {:ok, index} ->
+          index
 
-      index ->
-        %{env | query: Keyword.put(query, :index, index)}
-    end
+        _ ->
+          IndexStore.get_index(url)
+      end
+
+    %{env | query: Keyword.put(query, :index, index)}
   end
 
   defp maybe_set_wait(%{query: query} = env, wait) do
