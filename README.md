@@ -46,6 +46,12 @@ connection = Consul.Connection.new("http://consul:8500")
 Consul.Api.Health.list_nodes(connection, "my_service", passing: true)
 ```
 
+### Blocking queries
+
+This feature is supported only by selected endpoints. Check
+[Consul documentation](https://developer.hashicorp.com/consul/api-docs/features/blocking)
+for more information.
+
 In order to make blocking queries, use the option `:wait`:
 
 ```elixir
@@ -55,7 +61,13 @@ Consul.Api.Health.list_nodes(connection, "my_service", passing: true)
 
 In this case, the first execution will return immediately, while the next ones
 will wait up to 60 seconds to finalize. The time passed in the `:wait` argument
-is in milliseconds.
+is in milliseconds. Alternatively `wait: true` can be passed to use Consul's
+default value for that parameter (5 minutes).
+
+Important note: only subsequent requests made to the same URL by **the same
+process** will reuse the value of `X-Consul-Index` header from the most recent
+response. If multiple processes execute blocking queries to the same URL, the
+index will be tracked for each process separately.
 
 ## Read YAML values from Consul KV
 
