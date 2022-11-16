@@ -95,11 +95,11 @@ defmodule Tesla.Middleware.ConsulWatch do
     end
   end
 
-  defp format_wait(nil), do: nil
-  defp format_wait(true), do: nil
   defp format_wait(wait) when is_binary(wait), do: wait
 
-  defp format_wait(duration) do
+  defp format_wait(duration) when is_number(duration) do
+    duration = trunc(duration)
+
     ms =
       case rem(duration, 1_000) do
         0 ->
@@ -131,4 +131,6 @@ defmodule Tesla.Middleware.ConsulWatch do
       h -> "#{h}h#{m}"
     end
   end
+
+  defp format_wait(_), do: nil
 end
