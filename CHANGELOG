@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.2.0] - 2022-11-18
+
+- Added handling of edge cases when using blocking queries
+- Added relying on consul's default wait time (which is 5 minutes) when passing `wait: true`
+- Extracted index caching from middleware to `Consul.IndexStore` module, which is started on application start instead of `Tesla.Middleware.ConsulWatch`
+
 ## [0.1.6] - 2022-05-10
 
 ### Added
