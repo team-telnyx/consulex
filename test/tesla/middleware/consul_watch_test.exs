@@ -2,36 +2,52 @@ defmodule Tesla.Middleware.ConsulWatchTest do
   use ExUnit.Case
   import Tesla.Mock
 
-  alias Tesla.Middleware.ConsulWatch
+  alias Consul.IndexStore
 
   @base_url "http://consul"
   @key "foo"
 
   setup do
-    :ok = ConsulWatch.reset(%{url: "#{@base_url}/v1/kv/#{@key}"})
+    {:ok, _} = start_supervised(IndexStore)
+    :ok
   end
 
   test "doesn't specify index on initial fetch" do
+    conn = conn(wait: true)
     mock(fn env -> {:ok, response(env, "100")} end)
 
-    {:ok, %{query: query}} = Tesla.get(conn(), "/v1/kv/#{@key}")
+    {:ok, %{query: query}} = Tesla.get(conn, "/v1/kv/#{@key}")
 
-    refute Keyword.has_key?(query, :index)
+    assert query[:index] |> is_nil()
   end
 
-  test "specifies index on subsequent requests" do
+  test "uses cached index on subsequent requests" do
+    conn = conn(wait: true)
     mock(fn env -> {:ok, response(env, "100")} end)
 
     # initial fetch
-    Tesla.get(conn(), "/v1/kv/#{@key}")
+    Tesla.get(conn, "/v1/kv/#{@key}")
 
     # subsequent request
-    {:ok, %{query: query}} = Tesla.get(conn(), "/v1/kv/#{@key}")
+    {:ok, %{query: query}} = Tesla.get(conn, "/v1/kv/#{@key}")
 
     assert query[:index] == 100
   end
 
+  test "skips cached index and makes non-blocking request when index is given as nil" do
+    conn = conn(wait: true)
+    mock(fn env -> {:ok, response(env, "100")} end)
+
+    Tesla.get(conn, "/v1/kv/#{@key}")
+
+    {:ok, %{query: query}} = Tesla.get(conn, "/v1/kv/#{@key}", query: [index: nil])
+
+    assert query[:index] |> is_nil()
+  end
+
   test "resets index when consul responds with index that is not greater than zero" do
+    conn = conn(wait: true)
+
     mock(fn %{query: query} = env ->
       case Keyword.get(query, :index) do
         nil -> {:ok, response(env, "100")}
@@ -40,19 +56,21 @@ defmodule Tesla.Middleware.ConsulWatchTest do
     end)
 
     # initial fetch
-    {:ok, %{query: query}} = Tesla.get(conn(), "/v1/kv/#{@key}")
-    refute Keyword.has_key?(query, :index)
+    {:ok, %{query: query}} = Tesla.get(conn, "/v1/kv/#{@key}")
+    assert query[:index] |> is_nil()
 
     # next request that returns index of 0
-    {:ok, env} = Tesla.get(conn(), "/v1/kv/#{@key}")
+    {:ok, env} = Tesla.get(conn, "/v1/kv/#{@key}")
     assert Tesla.get_header(env, "x-consul-index") == "0"
 
     # subsequent request
-    {:ok, %{query: query}} = Tesla.get(conn(), "/v1/kv/#{@key}")
-    refute Keyword.has_key?(query, :index)
+    {:ok, %{query: query}} = Tesla.get(conn, "/v1/kv/#{@key}")
+    assert query[:index] |> is_nil()
   end
 
   test "resets index when consul responds with index that goes backwards" do
+    conn = conn(wait: true)
+
     mock(fn %{query: query} = env ->
       case Keyword.get(query, :index) do
         nil -> {:ok, response(env, "100")}
@@ -61,42 +79,83 @@ defmodule Tesla.Middleware.ConsulWatchTest do
     end)
 
     # initial fetch
-    {:ok, %{query: query}} = Tesla.get(conn(), "/v1/kv/#{@key}")
-    refute Keyword.has_key?(query, :index)
+    {:ok, %{query: query}} = Tesla.get(conn, "/v1/kv/#{@key}")
+    assert query[:index] |> is_nil()
 
     # next request that returns index of 50
-    {:ok, env} = Tesla.get(conn(), "/v1/kv/#{@key}")
+    {:ok, env} = Tesla.get(conn, "/v1/kv/#{@key}")
     assert Tesla.get_header(env, "x-consul-index") == "50"
 
     # subsequent request
-    {:ok, %{query: query}} = Tesla.get(conn(), "/v1/kv/#{@key}")
-    refute Keyword.has_key?(query, :index)
+    {:ok, %{query: query}} = Tesla.get(conn, "/v1/kv/#{@key}")
+    assert query[:index] |> is_nil()
   end
 
   test "doesn't wait on initial fetch" do
+    conn = conn(wait: 123_456)
     mock(fn env -> {:ok, response(env, "100")} end)
 
     {:ok, %{query: query}} =
-      conn(wait: 123_456)
+      conn
       |> Tesla.get("/v1/kv/#{@key}")
 
     refute Keyword.has_key?(query, :wait)
   end
 
   test "waits on subsequent requests" do
+    conn = conn(wait: 123_456)
     mock(fn env -> {:ok, response(env, "100")} end)
 
-    conn(wait: 123_456) |> Tesla.get("/v1/kv/#{@key}")
+    conn |> Tesla.get("/v1/kv/#{@key}")
 
     {:ok, %{query: query}} =
-      conn(wait: 123_456)
+      conn
       |> Tesla.get("/v1/kv/#{@key}")
 
     assert query[:wait] == "2m3.456s"
   end
 
-  defp conn(opts \\ []) do
-    opts = Keyword.put_new(opts, :wait, 0)
+  test "overrides wait param per request" do
+    conn = conn(wait: 30_000)
+    mock(fn env -> {:ok, response(env, "100")} end)
+
+    conn |> Tesla.get("/v1/kv/#{@key}")
+
+    {:ok, %{query: query}} =
+      conn
+      |> Tesla.get("/v1/kv/#{@key}", query: [wait: 60_000])
+
+    assert query[:wait] == "1m"
+  end
+
+  test "uses consul's default when wait option is set to true" do
+    conn = conn(wait: true)
+    mock(fn env -> {:ok, response(env, "100")} end)
+
+    conn |> Tesla.get("/v1/kv/#{@key}")
+
+    {:ok, %{query: query}} =
+      conn
+      |> Tesla.get("/v1/kv/#{@key}")
+
+    assert {:ok, nil} = Keyword.fetch(query, :wait)
+  end
+
+  test "uses consul's default when wait option is set to nil" do
+    conn = conn(wait: nil)
+    mock(fn env -> {:ok, response(env, "100")} end)
+
+    conn |> Tesla.get("/v1/kv/#{@key}")
+
+    {:ok, %{query: query}} =
+      conn
+      |> Tesla.get("/v1/kv/#{@key}")
+
+    assert {:ok, nil} = Keyword.fetch(query, :wait)
+  end
+
+  defp conn(opts) do
+    opts = Keyword.put_new(opts, :wait, nil)
     Consul.Connection.new(@base_url, [adapter: Tesla.Mock] ++ opts)
   end
 

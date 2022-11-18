@@ -10,7 +10,8 @@ defmodule Consul.MixProject do
       deps: deps(),
       package: package(),
       source_url: "https://github.com/team-telnyx/consulex",
-      description: description()
+      description: description(),
+      aliases: aliases()
     ]
   end
 
@@ -45,6 +46,12 @@ defmodule Consul.MixProject do
       licenses: ["Apache 2.0"],
       links: %{"GitHub" => "https://github.com/team-telnyx/consulex"},
       files: ~w"lib mix.exs README.md LICENSE"
+    ]
+  end
+
+  defp aliases do
+    [
+      test: ["test --no-start"]
     ]
   end
 end
