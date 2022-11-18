@@ -43,7 +43,7 @@ For simple polling requests, just create a Consul connection and pass it to a
 
 ```elixir
 connection = Consul.Connection.new("http://consul:8500")
-Consul.Api.Health.list_nodes(connection, "my_service", passing: true)
+Consul.Api.V1.Health.list_nodes(connection, "my_service", passing: true)
 ```
 
 ### Blocking queries
@@ -56,7 +56,7 @@ In order to make blocking queries, use the option `:wait`:
 
 ```elixir
 connection = Consul.Connection.new("http://consul:8500", wait: 60_000)
-Consul.Api.Health.list_nodes(connection, "my_service")
+Consul.Api.V1.Health.list_nodes(connection, "my_service")
 ```
 
 In this case, the first execution will return immediately, while the next ones
@@ -69,7 +69,7 @@ configured with `wait`. It can be done by specifying `index: nil` option in the
 request.
 
 ```elixir
-Consul.Api.Health.list_nodes(connection, "my_service", index: nil)
+Consul.Api.V1.Health.list_nodes(connection, "my_service", index: nil)
 ```
 
 ## Read YAML values from Consul KV
