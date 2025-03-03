@@ -72,7 +72,7 @@ defmodule Tesla.Middleware.ConsulWatch do
     {:ok, env}
   end
 
-  def store_index({:error, reason}), do: {:error, reason}
+  defp store_index({:error, reason}, _), do: {:error, reason}
 
   defp handle_new_index(url, nil) do
     IndexStore.reset_index(url)

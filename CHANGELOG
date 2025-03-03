@@ -1,5 +1,9 @@
 # Changelog
 
+## [0.2.1] - 2025-03-03
+
+- fix store_index/2 for handling errors
+
 ## [0.2.0] - 2022-11-18
 
 - Added handling of edge cases when using blocking queries
