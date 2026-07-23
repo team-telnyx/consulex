@@ -60,7 +60,9 @@ defmodule Consul.Connection do
   def new(base_url, opts \\ []) do
     middleware = [
       {Tesla.Middleware.BaseUrl, base_url},
-      Tesla.Middleware.DecompressResponse,
+      # :max_body_size is mandatory since tesla 1.18.3 / 1.20.0; older
+      # versions ignore the option. Consul responses are far below this cap.
+      {Tesla.Middleware.DecompressResponse, max_body_size: 32 * 1024 * 1024},
       Tesla.Middleware.FollowRedirects
     ]
 
