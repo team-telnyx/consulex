@@ -6,7 +6,8 @@ defmodule Consul.ConnectionTest do
   @body String.duplicate("a", 1024)
 
   # Tesla < 1.18.3 ignores :max_body_size, so the cap is only enforced from there on.
-  @bounded_tesla Version.match?(to_string(Application.spec(:tesla, :vsn)), ">= 1.18.3")
+  @skip_unbounded not Version.match?(to_string(Application.spec(:tesla, :vsn)), ">= 1.18.3") &&
+                    "needs Tesla >= 1.18.3"
 
   setup do
     mock(fn env ->
@@ -29,28 +30,33 @@ defmodule Consul.ConnectionTest do
     assert {:ok, %{body: @body}} = Tesla.get(conn, "/v1/kv/foo")
   end
 
-  if @bounded_tesla do
-    test "raises when a response inflates past max_body_size" do
-      conn = Consul.Connection.new(@base_url, adapter: Tesla.Mock, max_body_size: 1023)
+  @tag skip: @skip_unbounded
+  test "raises when a response inflates past max_body_size" do
+    conn = Consul.Connection.new(@base_url, adapter: Tesla.Mock, max_body_size: 1023)
 
-      error =
-        assert_raise Tesla.Middleware.Compression.Error, fn ->
-          Tesla.get(conn, "/v1/kv/foo")
-        end
+    error =
+      assert_raise Tesla.Middleware.Compression.Error, fn ->
+        Tesla.get(conn, "/v1/kv/foo")
+      end
 
-      assert error.reason == :max_body_size_exceeded
-    end
+    assert error.reason == :max_body_size_exceeded
+  end
 
-    test "raises when a gzip bomb inflates past the default limit" do
-      bomb = :zlib.gzip(:binary.copy(<<0>>, 17 * 1024 * 1024))
+  @tag skip: @skip_unbounded
+  test "raises when a gzip bomb inflates past the default limit" do
+    bomb = :zlib.gzip(:binary.copy(<<0>>, 17 * 1024 * 1024))
 
-      mock(fn env ->
-        {:ok, %{env | status: 200, headers: [{"content-encoding", "gzip"}], body: bomb}}
-      end)
+    mock(fn env ->
+      {:ok, %{env | status: 200, headers: [{"content-encoding", "gzip"}], body: bomb}}
+    end)
 
-      conn = Consul.Connection.new(@base_url, adapter: Tesla.Mock)
+    conn = Consul.Connection.new(@base_url, adapter: Tesla.Mock)
 
-      assert_raise Tesla.Middleware.Compression.Error, fn -> Tesla.get(conn, "/v1/kv/foo") end
-    end
+    error =
+      assert_raise Tesla.Middleware.Compression.Error, fn ->
+        Tesla.get(conn, "/v1/kv/foo")
+      end
+
+    assert error.reason == :max_body_size_exceeded
   end
 end

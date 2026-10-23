@@ -70,7 +70,7 @@ defmodule Consul.Connection do
     middleware = [
       {Tesla.Middleware.BaseUrl, base_url},
       {Tesla.Middleware.DecompressResponse,
-       max_body_size: Keyword.get(opts, :max_body_size, @default_max_body_size)},
+       max_body_size: Keyword.get(opts, :max_body_size) || @default_max_body_size},
       Tesla.Middleware.FollowRedirects
     ]
 
