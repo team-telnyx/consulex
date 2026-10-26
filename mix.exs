@@ -43,7 +43,7 @@ defmodule Consul.MixProject do
   defp package do
     [
       maintainers: ["Guilherme Balena Versiani <guilherme@telnyx.com>"],
-      licenses: ["Apache 2.0"],
+      licenses: ["Apache-2.0"],
       links: %{"GitHub" => "https://github.com/team-telnyx/consulex"},
       files: ~w"lib mix.exs README.md LICENSE"
     ]
