@@ -1,0 +1,104 @@
+# This workflow uses actions that are not certified by GitHub.
+# They are provided by a third-party and are governed by
+# separate terms of service, privacy policy, and support
+# documentation.
+
+name: Publish consulex hex package
+
+# Publishes to hex.pm when a commit lands on main.
+#
+# Guarded on the version in mix.exs not already being on hex.pm. Hex rejects a
+# re-publish of an existing version, so without that check every commit that
+# does not bump the version would fail the job and page whoever merged it. Most
+# commits do not bump it, so the common case is a clean skip.
+#
+# Releasing is therefore driven by mix.exs: bump `version:` in the same PR as
+# the change, and merging it publishes. Leave it alone and merging does nothing.
+on:
+  push:
+    branches: ["main"]
+
+jobs:
+  publish_to_hex:
+    name: Publish consulex package to Hex
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out
+        uses: actions/checkout@v4
+
+      - name: Set up Elixir
+        uses: erlef/setup-beam@v1
+        with:
+          elixir-version: "1.18"
+          otp-version: "27"
+
+      - name: Restore deps and build cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            deps
+            _build
+          key: ${{ runner.os }}-mix-${{ hashFiles('mix.lock') }}
+          restore-keys: ${{ runner.os }}-mix-
+
+      - name: Install dependencies
+        run: mix deps.get
+
+      - name: Run tests
+        run: mix test
+
+      # `mix hex.publish` is irreversible: a published version cannot be
+      # replaced, only retired. Check hex.pm first so a commit that does not
+      # bump the version skips cleanly instead of failing the job.
+      - name: Check whether this version is already on hex.pm
+        id: check
+        run: |
+          set -euo pipefail
+          VERSION="$(mix run --no-start --no-compile -e 'IO.puts(Mix.Project.config()[:version])' | tail -n1)"
+          echo "Version in mix.exs: ${VERSION}"
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+
+          STATUS="$(curl -sS -o /dev/null -w '%{http_code}' \
+            "https://hex.pm/api/packages/consulex/releases/${VERSION}")"
+
+          case "${STATUS}" in
+            200)
+              echo "::notice::consulex ${VERSION} is already on hex.pm; nothing to publish."
+              echo "should_publish=false" >> "$GITHUB_OUTPUT"
+              ;;
+            404)
+              echo "consulex ${VERSION} is not on hex.pm; it will be published."
+              echo "should_publish=true" >> "$GITHUB_OUTPUT"
+              ;;
+            *)
+              echo "Unexpected HTTP ${STATUS} from hex.pm; refusing to guess." >&2
+              exit 1
+              ;;
+          esac
+
+      - name: Get HEX_API_KEY from vault
+        if: steps.check.outputs.should_publish == 'true'
+        uses: hashicorp/vault-action@v2.4.0
+        with:
+          method: approle
+          path: approle_github_org_runners
+          roleId: ${{ secrets.VAULT_HA_ROLE_ID_DEV }}
+          secretId: ${{ secrets.VAULT_HA_SECRET_ID_DEV }}
+          url: ${{ secrets.VAULT_HA_DEV_URL }}
+          secrets: telephony-backend-squad/data/provided-creds/elixir ELIXIR_HEX_KEY | ELIXIR_HEX_KEY
+
+      - name: Publish package to hex.pm
+        if: steps.check.outputs.should_publish == 'true'
+        run: mix hex.publish --yes
+        env:
+          HEX_API_KEY: ${{ env.ELIXIR_HEX_KEY }}
+
+      - name: Summary
+        if: always()
+        run: |
+          if [ "${{ steps.check.outputs.should_publish }}" = "true" ]; then
+            echo "Published consulex ${{ steps.check.outputs.version }} to hex.pm." >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "Skipped: consulex ${{ steps.check.outputs.version }} is already on hex.pm." >> "$GITHUB_STEP_SUMMARY"
+          fi
