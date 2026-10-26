@@ -101,6 +101,29 @@ jobs:
               ;;
           esac
 
+      # consulex is a public repo, and GitHub does not pass org secrets to public
+      # repos unless they are scoped to include them. Without this check the
+      # Vault action fails with a bare "Input required and not supplied: url",
+      # which does not point at the cause.
+      - name: Check Vault credentials are present
+        if: steps.check.outputs.should_publish == 'true'
+        env:
+          VAULT_URL: ${{ secrets.VAULT_HA_DEV_URL }}
+          VAULT_ROLE_ID: ${{ secrets.VAULT_HA_ROLE_ID_DEV }}
+          VAULT_SECRET_ID: ${{ secrets.VAULT_HA_SECRET_ID_DEV }}
+        run: |
+          set -euo pipefail
+          MISSING=""
+          [ -n "${VAULT_URL}" ]       || MISSING="${MISSING} VAULT_HA_DEV_URL"
+          [ -n "${VAULT_ROLE_ID}" ]   || MISSING="${MISSING} VAULT_HA_ROLE_ID_DEV"
+          [ -n "${VAULT_SECRET_ID}" ] || MISSING="${MISSING} VAULT_HA_SECRET_ID_DEV"
+
+          if [ -n "${MISSING}" ]; then
+            echo "::error::Missing secret(s):${MISSING}. consulex is a public repo, so the org's VAULT_HA_* secrets are not exposed to it. Scope those org secrets to include consulex, or add a repo-level HEX_API_KEY and drop the Vault steps."
+            exit 1
+          fi
+          echo "Vault credentials present."
+
       - name: Get HEX_API_KEY from vault
         if: steps.check.outputs.should_publish == 'true'
         uses: hashicorp/vault-action@v2.4.0
@@ -113,16 +136,37 @@ jobs:
           secrets: telephony-backend-squad/data/provided-creds/elixir ELIXIR_HEX_KEY | ELIXIR_HEX_KEY
 
       - name: Publish package to hex.pm
+        id: publish
         if: steps.check.outputs.should_publish == 'true'
         run: mix hex.publish --yes ${{ inputs.replace == true && '--replace' || '' }}
         env:
           HEX_API_KEY: ${{ env.ELIXIR_HEX_KEY }}
 
+      # Keyed on the publish step's own outcome, not on the guard's decision:
+      # the guard only says whether a publish was *wanted*, so reading it here
+      # claimed success for runs where a later step (Vault, Hex) had failed.
       - name: Summary
         if: always()
+        env:
+          VERSION: ${{ steps.check.outputs.version }}
+          WANTED: ${{ steps.check.outputs.should_publish }}
+          OUTCOME: ${{ steps.publish.outcome }}
         run: |
-          if [ "${{ steps.check.outputs.should_publish }}" = "true" ]; then
-            echo "Published consulex ${{ steps.check.outputs.version }} to hex.pm." >> "$GITHUB_STEP_SUMMARY"
-          else
-            echo "Skipped: consulex ${{ steps.check.outputs.version }} is already on hex.pm." >> "$GITHUB_STEP_SUMMARY"
-          fi
+          set -euo pipefail
+          case "${OUTCOME}" in
+            success)
+              echo "Published consulex ${VERSION} to hex.pm." >> "$GITHUB_STEP_SUMMARY"
+              ;;
+            failure)
+              echo "FAILED to publish consulex ${VERSION}; it is not on hex.pm." >> "$GITHUB_STEP_SUMMARY"
+              ;;
+            *)
+              # The publish step never ran: either the guard skipped it, or a
+              # step before it failed.
+              if [ "${WANTED}" = "true" ]; then
+                echo "Did NOT publish consulex ${VERSION}: a step before the publish failed." >> "$GITHUB_STEP_SUMMARY"
+              else
+                echo "Skipped: consulex ${VERSION} is already on hex.pm." >> "$GITHUB_STEP_SUMMARY"
+              fi
+              ;;
+          esac
