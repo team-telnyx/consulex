@@ -43,12 +43,8 @@ defmodule Consul.Connection do
 
     * `adapter` - specify custom Tesla adapter, if not set will use Tesla's
       default one
-    * `max_body_size` - maximum size, in bytes, of a decompressed response
-      body, passed to `Tesla.Middleware.DecompressResponse`. Defaults to
-      16 MB (`16 * 1024 * 1024`). Pass `:infinity` to disable the cap. Only
-      enforced on Tesla >= 1.18.3, where a response inflating past the cap
-      raises `Tesla.Middleware.Compression.Error`; older Tesla versions
-      ignore it
+    * `max_body_size` - max bytes of a decompressed response body (default
+      16 MB, `:infinity` disables)
     * `retry` - options for `Tesla.Middleware.Retry` middleware
     * `timeout` - when given, will include `Tesla.Middleware.Timeout`
       middleware configured with given value
