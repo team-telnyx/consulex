@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.2.2] - 2026-10-23
+
+- pass a bounded `:max_body_size` (default 16 MB, configurable via the
+  `max_body_size` option of `Consul.Connection.new/2`) to
+  `Tesla.Middleware.DecompressResponse`. Tesla >= 1.18.3 (CVE-2026-48594)
+  requires it and raises `ArgumentError` on every response without it.
+  The cap is only enforced on Tesla >= 1.18.3; older versions ignore it
+
 ## [0.2.1] - 2025-03-03
 
 - fix store_index/2 for handling errors
