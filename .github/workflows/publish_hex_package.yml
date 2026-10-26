@@ -5,7 +5,8 @@
 
 name: Publish consulex hex package
 
-# Publishes to hex.pm when a commit lands on main.
+# Publishes to hex.pm when a commit lands on main, or when run by hand from the
+# Actions tab.
 #
 # Guarded on the version in mix.exs not already being on hex.pm. Hex rejects a
 # re-publish of an existing version, so without that check every commit that
@@ -14,9 +15,23 @@ name: Publish consulex hex package
 #
 # Releasing is therefore driven by mix.exs: bump `version:` in the same PR as
 # the change, and merging it publishes. Leave it alone and merging does nothing.
+#
+# A manual run covers what the push trigger cannot: retrying a run that failed,
+# or publishing from a ref other than main. It reads the version from mix.exs on
+# whichever ref you pick -- there is no version input, so that file stays the
+# single source of truth either way.
 on:
   push:
     branches: ["main"]
+
+  workflow_dispatch:
+    inputs:
+      replace:
+        description: >-
+          Overwrite the version if it is already on hex.pm. Hex only permits
+          this within one hour of that version's initial publish.
+        type: boolean
+        default: false
 
 jobs:
   publish_to_hex:
@@ -48,11 +63,15 @@ jobs:
       - name: Run tests
         run: mix test
 
-      # `mix hex.publish` is irreversible: a published version cannot be
-      # replaced, only retired. Check hex.pm first so a commit that does not
-      # bump the version skips cleanly instead of failing the job.
+      # Check hex.pm first so a commit that does not bump the version skips
+      # cleanly instead of failing the job. A manual run can pass `replace` to
+      # overwrite a version that is already up; Hex permits that only within an
+      # hour of its initial publish, and the publish step forwards --replace so
+      # a late attempt gets Hex's own error rather than being silently skipped.
       - name: Check whether this version is already on hex.pm
         id: check
+        env:
+          REPLACE: ${{ inputs.replace }}
         run: |
           set -euo pipefail
           VERSION="$(mix run --no-start --no-compile -e 'IO.puts(Mix.Project.config()[:version])' | tail -n1)"
@@ -64,8 +83,13 @@ jobs:
 
           case "${STATUS}" in
             200)
-              echo "::notice::consulex ${VERSION} is already on hex.pm; nothing to publish."
-              echo "should_publish=false" >> "$GITHUB_OUTPUT"
+              if [ "${REPLACE}" = "true" ]; then
+                echo "::warning::consulex ${VERSION} is already on hex.pm; overwriting because 'replace' was set."
+                echo "should_publish=true" >> "$GITHUB_OUTPUT"
+              else
+                echo "::notice::consulex ${VERSION} is already on hex.pm; nothing to publish."
+                echo "should_publish=false" >> "$GITHUB_OUTPUT"
+              fi
               ;;
             404)
               echo "consulex ${VERSION} is not on hex.pm; it will be published."
@@ -90,7 +114,7 @@ jobs:
 
       - name: Publish package to hex.pm
         if: steps.check.outputs.should_publish == 'true'
-        run: mix hex.publish --yes
+        run: mix hex.publish --yes ${{ inputs.replace == true && '--replace' || '' }}
         env:
           HEX_API_KEY: ${{ env.ELIXIR_HEX_KEY }}
 
